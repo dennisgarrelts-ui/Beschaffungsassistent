@@ -65,6 +65,7 @@ export default function App() {
   
   // Artikel-Eingabe State
   const [articleNr, setArticleNr] = useState('');
+  const [mpn, setMpn] = useState(''); // State für Herstellerteilenummer
   const [articleName, setArticleName] = useState('');
   const [priceGrossInput, setPriceGrossInput] = useState('');
   const [quantity, setQuantity] = useState(1);
@@ -116,7 +117,7 @@ export default function App() {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!articleNr.trim() || !articleName.trim() || !priceGrossInput.trim()) {
-       setError('Bitte füllen Sie alle Felder aus.');
+       setError('Bitte füllen Sie alle erforderlichen Felder aus.');
        return;
     }
 
@@ -138,6 +139,7 @@ export default function App() {
       id: crypto.randomUUID(),
       shop: selectedShop.name,
       articleNr: articleNr.trim(),
+      mpn: mpn.trim(),
       name: articleName.trim(),
       priceNet: netPrice,
       priceGross: grossPrice,
@@ -148,6 +150,7 @@ export default function App() {
     
     // Formular zurücksetzen & Fokus wieder auf Artikelnummer setzen
     setArticleNr('');
+    setMpn('');
     setArticleName('');
     setPriceGrossInput('');
     setQuantity(1);
@@ -216,10 +219,11 @@ export default function App() {
   };
 
   const handleExportCSV = () => {
-    const headers = ['Artikelnummer', 'Artikelname', 'Menge', 'Netto (Stk.)', 'Brutto (Stk.)', 'Netto (Gesamt)', 'Brutto (Gesamt)'];
+    const headers = ['Artikelnummer', 'Herstellerteilenummer', 'Artikelname', 'Menge', 'Netto (Stk.)', 'Brutto (Stk.)', 'Netto (Gesamt)', 'Brutto (Gesamt)'];
     
     const rows = items.map(item => [
       `"${item.articleNr}"`,
+      `"${item.mpn || ''}"`,
       `"${item.name.replace(/"/g, '""')}"`,
       item.quantity,
       formatCsvNumberNettoStk(item.priceNet),
@@ -269,7 +273,7 @@ export default function App() {
           minimumFractionDigits: 2,
           maximumFractionDigits: 5
         }).format(value);
-        return formatted + ' EUR';
+        return formatted + ' €';
       };
 
       // PDF Export Formatierung für Netto (Stk.) (max 3 Nachkommastellen)
@@ -278,7 +282,7 @@ export default function App() {
           minimumFractionDigits: 2,
           maximumFractionDigits: 3
         }).format(value);
-        return formatted + ' EUR';
+        return formatted + ' €';
       };
 
       // PDF Export Formatierung für Gesamtbeträge (strikt 2 Nachkommastellen)
@@ -287,7 +291,7 @@ export default function App() {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         }).format(value);
-        return formatted + ' EUR';
+        return formatted + ' €';
       };
 
       // --- 1. KOPFBEREICH (Rahmen) ---
@@ -348,9 +352,14 @@ export default function App() {
         doc.text(`E-Mail: ${selectedShop.email}`, 15, currentAddressY);
       }
 
+      const currentDate = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
       doc.setFontSize(11);
-      doc.text(`26826 Weener, ${new Date().toLocaleDateString('de-DE')}`, 195, 83, { align: "right" });
-      doc.text("Rostocker Str. 12", 195, 89, { align: "right" });
+      doc.setFont("helvetica", "bold");
+      doc.text("Ausbildungswerkstatt Weener", 195, 77, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.text("Rostocker Str. 12", 195, 83, { align: "right" });
+      doc.text("26826 Weener", 195, 89, { align: "right" });
+      doc.text(currentDate, 195, 95, { align: "right" });
 
       doc.setFontSize(13);
       doc.setFont("helvetica", "bold");
@@ -360,14 +369,21 @@ export default function App() {
       doc.autoTable({
         startY: 116,
         head: [['Artikel', 'Menge', 'Netto (Stk.)', 'Brutto (Stk.)', 'Netto (Ges.)', 'Brutto (Ges.)']],
-        body: items.map(item => [
-          `${item.name}\nArt.-Nr: ${item.articleNr}`,
-          `${item.quantity}x`,
-          pdfFormatCurrencyNettoStk(item.priceNet),
-          pdfFormatCurrency(item.priceGross),
-          pdfFormatCurrencyTotal(item.priceNet * item.quantity),
-          pdfFormatCurrencyTotal(item.priceGross * item.quantity)
-        ]),
+        body: items.map(item => {
+          // Ein unsichtbarer Platzhalter, damit die Tabelle die Zeilenhöhe korrekt berechnet
+          let dummyText = `${item.name}\nArt.-Nr: ${item.articleNr}`;
+          if (item.mpn) {
+            dummyText += `\nHerst.-Nr: ${item.mpn}`;
+          }
+          return [
+            dummyText,
+            `${item.quantity}x`,
+            pdfFormatCurrencyNettoStk(item.priceNet),
+            pdfFormatCurrency(item.priceGross),
+            pdfFormatCurrencyTotal(item.priceNet * item.quantity),
+            pdfFormatCurrencyTotal(item.priceGross * item.quantity)
+          ];
+        }),
         foot: [[
           '',
           '',
@@ -379,7 +395,7 @@ export default function App() {
         theme: 'grid',
         headStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.3 },
         bodyStyles: { textColor: 0, lineColor: [150, 150, 150] },
-        footStyles: { fillColor: [245, 245, 245], textColor: 0, fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.3 },
+        footStyles: { fillColor: [245, 245, 245], textColor: 0, fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.3, halign: 'right' },
         columnStyles: {
           0: { cellWidth: 70 },
           1: { cellWidth: 15, halign: 'center', valign: 'middle' },
@@ -388,7 +404,46 @@ export default function App() {
           4: { cellWidth: 24, halign: 'right', valign: 'middle' },
           5: { halign: 'right', valign: 'middle' }
         },
-        styles: { fontSize: 9, font: "helvetica" }
+        styles: { fontSize: 9, font: "helvetica" },
+        // --- MANUELLES ZEICHNEN FÜR FETTDRUCK IN DER PDF ---
+        willDrawCell: function (data) {
+          // Unterdrückt den Standard-Text für Spalte 0, damit wir ihn selbst zeichnen können
+          if (data.section === 'body' && data.column.index === 0) {
+            data.cell.text = [];
+          }
+        },
+        didDrawCell: function (data) {
+          if (data.section === 'body' && data.column.index === 0) {
+            const item = items[data.row.index];
+            const startX = data.cell.x + 1.5; // Leichtes Padding links
+            let currentY = data.cell.y + 4.5; // Baseline der ersten Zeile
+            
+            // 1. Artikelbeschreibung in FETT
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "bold");
+            const nameLines = doc.splitTextToSize(item.name, data.cell.width - 3);
+            doc.text(nameLines, startX, currentY);
+            currentY += (nameLines.length * 3.5);
+            
+            // 2. Artikelnummer (Label FETT, Wert NORMAL)
+            doc.setFontSize(8.5);
+            doc.setFont("helvetica", "bold");
+            doc.text("Art.-Nr: ", startX, currentY);
+            const artNrWidth = doc.getTextWidth("Art.-Nr: ");
+            doc.setFont("helvetica", "normal");
+            doc.text(item.articleNr, startX + artNrWidth, currentY);
+            currentY += 3.5;
+            
+            // 3. Herstellerteilenummer (Label FETT, Wert NORMAL)
+            if (item.mpn) {
+              doc.setFont("helvetica", "bold");
+              doc.text("Herst.-Nr: ", startX, currentY);
+              const mpnWidth = doc.getTextWidth("Herst.-Nr: ");
+              doc.setFont("helvetica", "normal");
+              doc.text(item.mpn, startX + mpnWidth, currentY);
+            }
+          }
+        }
       });
 
       // --- 5. FUSSBEREICH (Rahmen für Begründung) ---
@@ -659,6 +714,18 @@ export default function App() {
                       required
                     />
                   </div>
+
+                  {/* Herstellerteilenummer jetzt unter der Beschreibung */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Herstellerteilenummer (optional)</label>
+                    <input 
+                      type="text"
+                      value={mpn}
+                      onChange={(e) => setMpn(e.target.value)}
+                      placeholder="z.B. L7805CV"
+                      className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    />
+                  </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Einzelpreis (Brutto in €)</label>
@@ -746,7 +813,7 @@ export default function App() {
                 </div>
 
                 {/* ADRESSE & DATUM */}
-                <div className="flex justify-between items-end mb-8 text-[13px] font-serif">
+                <div className="flex justify-between items-start mb-8 text-[13px] font-serif">
                   <div className="flex flex-col">
                     <span className="mb-2 uppercase underline decoration-1 text-[11px]">Lieferant/ Adressat</span>
                     <span className="font-bold text-[15px]">{selectedShop.name}</span>
@@ -755,9 +822,11 @@ export default function App() {
                     {selectedShop.phone && <span className="mt-1 text-[12px] text-slate-700">Tel.: {selectedShop.phone}</span>}
                     {selectedShop.email && <span className="text-[12px] text-slate-700">E-Mail: {selectedShop.email}</span>}
                   </div>
-                  <div className="text-right leading-snug">
-                    <div>26826 Weener, {new Date().toLocaleDateString('de-DE')}</div>
+                  <div className="text-right leading-snug pt-6">
+                    <div className="font-bold text-[14px]">Ausbildungswerkstatt Weener</div>
                     <div>Rostocker Str. 12</div>
+                    <div>26826 Weener</div>
+                    <div>{new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
                   </div>
                 </div>
 
@@ -787,8 +856,11 @@ export default function App() {
                       items.map((item) => (
                         <tr key={item.id} className="group">
                           <td className="py-3 px-1">
-                            <div className="font-semibold text-slate-900">{item.name}</div>
-                            <div className="text-[11px] text-slate-600 mt-0.5">Art.-Nr: {item.articleNr}</div>
+                            <div className="font-bold text-slate-900">{item.name}</div>
+                            <div className="text-[11px] text-slate-600 mt-0.5">
+                              <div><span className="font-bold text-slate-700">Art.-Nr:</span> {item.articleNr}</div>
+                              {item.mpn && <div className="mt-0.5"><span className="font-bold text-slate-700">Herst.-Nr:</span> <span className="font-mono text-slate-800">{item.mpn}</span></div>}
+                            </div>
                           </td>
                           <td className="py-3 px-1 text-center font-bold">
                             {item.quantity}x
